@@ -28,16 +28,15 @@ jobs:
 
       # Step 3: Login to Amazon ECR
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
-        with:
-          region: ${{ secrets.AWS_REGION }}
 
       # Step 4: Build Docker image and push to ECR
       - name: Build and push Docker image
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
+          # Create ECR repo if not exists
+          aws ecr describe-repositories --repository-names $IMAGE_NAME --region $AWS_REGION || \
+          aws ecr create-repository --repository-name $IMAGE_NAME --region $AWS_REGION
+
           # Get ECR URI
           REPO_URI=$(aws ecr describe-repositories --repository-names $IMAGE_NAME --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
 
@@ -54,3 +53,5 @@ jobs:
         run: |
           terraform init
           terraform apply -auto-approve
+
+
