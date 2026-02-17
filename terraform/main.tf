@@ -39,13 +39,6 @@ resource "aws_security_group" "strapi_sg" {
 }
 
 # -------------------------------
-# ECR Repository
-# -------------------------------
-resource "aws_ecr_repository" "strapi_repo" {
-  name = var.ecr_repo_name
-}
-
-# -------------------------------
 # ECS Cluster
 # -------------------------------
 resource "aws_ecs_cluster" "strapi_cluster" {
@@ -90,7 +83,7 @@ resource "aws_ecs_task_definition" "strapi_task" {
   container_definitions = jsonencode([
     {
       name      = "strapi-app"
-      image     = "${aws_ecr_repository.strapi_repo.repository_url}:${var.docker_image_tag}"
+      image     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/strapi-app:${var.docker_image_tag}"
       essential = true
       portMappings = [
         {
@@ -119,3 +112,4 @@ resource "aws_ecs_service" "strapi_service" {
 
   depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
 }
+
