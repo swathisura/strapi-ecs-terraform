@@ -28,30 +28,35 @@ jobs:
 
       # Step 3: Login to Amazon ECR
       - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
+        with:
+          region: ${{ secrets.AWS_REGION }}
 
       # Step 4: Build Docker image and push to ECR
       - name: Build and push Docker image
         run: |
-          # Create ECR repo if not exists
-          aws ecr describe-repositories --repository-names $IMAGE_NAME --region $AWS_REGION || \
-          aws ecr create-repository --repository-name $IMAGE_NAME --region $AWS_REGION
-
-          # Get ECR URI
           REPO_URI=$(aws ecr describe-repositories --repository-names $IMAGE_NAME --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
 
-          # Build Docker image with correct context
+          # Build Docker image using the strapi-app folder as context
           docker build -t $IMAGE_NAME:latest ./strapi-app
 
           # Tag and push to ECR
           docker tag $IMAGE_NAME:latest $REPO_URI:latest
           docker push $REPO_URI:latest
 
-      # Step 5: Terraform init & apply
+      # Step 5: Install Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.7.0
+
+      # Step 6: Terraform init & apply
       - name: Terraform Init & Apply
         working-directory: ./terraform
         run: |
           terraform init
           terraform apply -auto-approve
+
 
 
