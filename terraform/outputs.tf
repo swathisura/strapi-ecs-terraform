@@ -7,5 +7,5 @@ output "ecs_service_name" {
 }
 
 output "ecr_repo_url" {
-  value = 976136922849.dkr.ecr.us-east-1.amazonaws.com/strapi-app
+  value = "976136922849.dkr.ecr.us-east-1.amazonaws.com/strapi-app"
 }
