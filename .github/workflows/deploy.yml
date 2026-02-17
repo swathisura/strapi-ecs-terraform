@@ -9,10 +9,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    env:
-      IMAGE_NAME: strapi-app
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -29,14 +25,21 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          REPO_URI=$(aws ecr describe-repositories --repository-names $IMAGE_NAME --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
-          docker build -t $IMAGE_NAME:latest ./strapi-app
-          docker tag $IMAGE_NAME:latest $REPO_URI:latest
+          REPO_URI=$(aws ecr describe-repositories --repository-names strapi-app --query "repositories[0].repositoryUri" --output text)
+          docker build -t strapi-app:latest ./strapi-app
+          docker tag strapi-app:latest $REPO_URI:latest
           docker push $REPO_URI:latest
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.9.0
 
       - name: Terraform Init & Apply
         working-directory: ./terraform
         run: |
           terraform init
           terraform apply -auto-approve
+
+
 
