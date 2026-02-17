@@ -9,34 +9,48 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGE_NAME: strapi-app
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      # Step 1: Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v2
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+      # Step 2: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Login to AWS ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      # Step 3: Login to Amazon ECR
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          region: ${{ secrets.AWS_REGION }}
 
-    - name: Build Docker image
-      run: |
-        IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi-app:latest"
-        docker build -t strapi-app:latest ./strapi-app
-        docker tag strapi-app:latest $IMAGE_URI
+      # Step 4: Build Docker image and push to ECR
+      - name: Build and push Docker image
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          # Get ECR URI
+          REPO_URI=$(aws ecr describe-repositories --repository-names $IMAGE_NAME --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
 
-    - name: Push Docker image to ECR
-      run: |
-        IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi-app:latest"
-        docker push $IMAGE_URI
+          # Build Docker image with correct context
+          docker build -t $IMAGE_NAME:latest ./strapi-app
 
-    - name: Terraform Init & Apply
-      working-directory: ./terraform
-      run: |
-        terraform init
-        terraform apply -auto-approve
+          # Tag and push to ECR
+          docker tag $IMAGE_NAME:latest $REPO_URI:latest
+          docker push $REPO_URI:latest
+
+      # Step 5: Terraform init & apply
+      - name: Terraform Init & Apply
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve
