@@ -1,62 +1,171 @@
-name: Deploy Strapi to ECS
+# -------------------------------
+# Variables
+# -------------------------------
+variable "aws_region" {
+  default = "us-east-1"
+}
 
-on:
-  push:
-    branches:
-      - main
+variable "ecr_repo_name" {
+  default = "strapi-app"
+}
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+variable "ecs_cluster_name" {
+  default = "strapi-cluster"
+}
 
-    env:
-      IMAGE_NAME: strapi-app
-      AWS_REGION: ${{ secrets.AWS_REGION }}
+variable "ecs_task_family" {
+  default = "strapi-task"
+}
 
-    steps:
-      # Step 1: Checkout repo
-      - name: Checkout code
-        uses: actions/checkout@v3
+variable "ecs_service_name" {
+  default = "strapi-service"
+}
 
-      # Step 2: Configure AWS credentials
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+variable "docker_image_tag" {
+  default = "latest"
+}
 
-      # Step 3: Login to Amazon ECR
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-        with:
-          region: ${{ secrets.AWS_REGION }}
+variable "desired_count" {
+  default = 1
+}
 
-      # Step 4: Build Docker image and push to ECR
-      - name: Build and push Docker image
-        run: |
-          REPO_URI=$(aws ecr describe-repositories --repository-names $IMAGE_NAME --query "repositories[0].repositoryUri" --output text --region $AWS_REGION)
+# -------------------------------
+# VPC, Subnet, Security Group
+# -------------------------------
+resource "aws_vpc" "strapi_vpc" {
+  cidr_block = "10.0.0.0/16"
+}
 
-          # Build Docker image using the strapi-app folder as context
-          docker build -t $IMAGE_NAME:latest ./strapi-app
+resource "aws_subnet" "strapi_subnet" {
+  vpc_id            = aws_vpc.strapi_vpc.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "${var.aws_region}a"
+}
 
-          # Tag and push to ECR
-          docker tag $IMAGE_NAME:latest $REPO_URI:latest
-          docker push $REPO_URI:latest
+resource "aws_security_group" "strapi_sg" {
+  name        = "strapi-sg"
+  description = "Allow HTTP/SSH traffic"
+  vpc_id      = aws_vpc.strapi_vpc.id
 
-      # Step 5: Install Terraform
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.7.0
+  ingress {
+    from_port   = 1337
+    to_port     = 1337
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-      # Step 6: Terraform init & apply
-      - name: Terraform Init & Apply
-        working-directory: ./terraform
-        run: |
-          terraform init
-          terraform apply -auto-approve
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# -------------------------------
+# ECR Repository
+# -------------------------------
+resource "aws_ecr_repository" "strapi_repo" {
+  name = var.ecr_repo_name
+}
+
+# -------------------------------
+# ECS Cluster
+# -------------------------------
+resource "aws_ecs_cluster" "strapi_cluster" {
+  name = var.ecs_cluster_name
+}
+
+# -------------------------------
+# IAM Role for ECS Task Execution
+# -------------------------------
+resource "aws_iam_role" "ecs_task_execution_role" {
+  name = "ecs-task-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ecs-tasks.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# -------------------------------
+# ECS Task Definition (Fargate)
+# -------------------------------
+resource "aws_ecs_task_definition" "strapi_task" {
+  family                   = var.ecs_task_family
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "strapi-app"
+      image     = "${aws_ecr_repository.strapi_repo.repository_url}:${var.docker_image_tag}"
+      essential = true
+      portMappings = [
+        {
+          containerPort = 1337
+          protocol      = "tcp"
+        }
+      ]
+    }
+  ])
+}
+
+# -------------------------------
+# ECS Service (Fargate)
+# -------------------------------
+resource "aws_ecs_service" "strapi_service" {
+  name            = var.ecs_service_name
+  cluster         = aws_ecs_cluster.strapi_cluster.id
+  task_definition = aws_ecs_task_definition.strapi_task.arn
+  desired_count   = var.desired_count
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets         = [aws_subnet.strapi_subnet.id]
+    security_groups = [aws_security_group.strapi_sg.id]
+    assign_public_ip = true
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.ecs_task_execution_policy]
+}
+
+# -------------------------------
+# Outputs
+# -------------------------------
+output "ecr_repo_url" {
+  value = aws_ecr_repository.strapi_repo.repository_url
+}
+
+output "ecs_cluster_name" {
+  value = aws_ecs_cluster.strapi_cluster.name
+}
+
+output "ecs_service_name" {
+  value = aws_ecs_service.strapi_service.name
+}
+
 
 
 
