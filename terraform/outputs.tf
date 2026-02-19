@@ -1,5 +1,5 @@
 output "ecs_cluster_name" {
-  value = aws_ecs_cluster.strapi_cluster.name
+  value = aws_ecs_cluster.strapi.name
 }
 
 output "ecs_service_name" {
