@@ -2,13 +2,16 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ===============================
-# DEFAULT VPC + SUBNETS (SAFE)
-# ===============================
+# -------------------------------
+# EXISTING DEFAULT VPC
+# -------------------------------
 data "aws_vpc" "default" {
   default = true
 }
 
+# -------------------------------
+# EXISTING SUBNETS (from default VPC)
+# -------------------------------
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -16,53 +19,38 @@ data "aws_subnets" "default" {
   }
 }
 
-# ===============================
-# SECURITY GROUP
-# ===============================
-resource "aws_security_group" "strapi_sg" {
+# -------------------------------
+# EXISTING SECURITY GROUP
+# -------------------------------
+data "aws_security_group" "strapi_sg" {
   name   = "strapi-sg"
   vpc_id = data.aws_vpc.default.id
-
-  ingress {
-    from_port   = 1337
-    to_port     = 1337
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 }
 
-# ===============================
+# -------------------------------
 # ECS CLUSTER
-# ===============================
+# -------------------------------
 resource "aws_ecs_cluster" "strapi_cluster" {
   name = var.ecs_cluster_name
 }
 
-# ===============================
-# EXISTING IAM ROLE (DO NOT CREATE)
-# ===============================
+# -------------------------------
+# EXISTING IAM ROLE
+# -------------------------------
 data "aws_iam_role" "ecs_task_execution_role" {
   name = "ecs-task-execution-role"
 }
 
-# ===============================
+# -------------------------------
 # EXISTING ECR REPO
-# ===============================
+# -------------------------------
 data "aws_ecr_repository" "strapi_repo" {
-  name = "strapi-app"
+  name = var.ecr_repo_name
 }
 
-
-# ===============================
-# ECS TASK DEFINITION
-# ===============================
+# -------------------------------
+# ECS TASK DEFINITION (FARGATE)
+# -------------------------------
 resource "aws_ecs_task_definition" "strapi_task" {
   family                   = var.ecs_task_family
   network_mode             = "awsvpc"
@@ -88,9 +76,9 @@ resource "aws_ecs_task_definition" "strapi_task" {
   ])
 }
 
-# ===============================
+# -------------------------------
 # ECS SERVICE (FARGATE)
-# ===============================
+# -------------------------------
 resource "aws_ecs_service" "strapi_service" {
   name            = var.ecs_service_name
   cluster         = aws_ecs_cluster.strapi_cluster.id
@@ -100,10 +88,7 @@ resource "aws_ecs_service" "strapi_service" {
 
   network_configuration {
     subnets          = data.aws_subnets.default.ids
-    security_groups  = [aws_security_group.strapi_sg.id]
+    security_groups  = [data.aws_security_group.strapi_sg.id]
     assign_public_ip = true
   }
-
-  depends_on = [aws_ecs_cluster.strapi_cluster]
 }
-
