@@ -10,13 +10,30 @@ data "aws_vpc" "default" {
 }
 
 # -------------------------------
-# EXISTING SUBNETS (from default VPC)
+# CHECK OR CREATE SUBNETS
 # -------------------------------
+# If default VPC already has subnets, we can use them
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
   }
+}
+
+# If there are no subnets in default VPC, create one
+resource "aws_subnet" "strapi_subnet" {
+  count                   = length(data.aws_subnets.default.ids) == 0 ? 1 : 0
+  vpc_id                  = data.aws_vpc.default.id
+  cidr_block              = cidrsubnet(data.aws_vpc.default.cidr_block, 8, 1)
+  availability_zone       = "${var.aws_region}a"
+  map_public_ip_on_launch = true
+}
+
+# Final subnet list to use
+locals {
+  subnet_ids = length(data.aws_subnets.default.ids) > 0 ?
+                data.aws_subnets.default.ids :
+                [aws_subnet.strapi_subnet[0].id]
 }
 
 # -------------------------------
@@ -47,7 +64,6 @@ data "aws_iam_role" "ecs_task_execution_role" {
 data "aws_ecr_repository" "strapi_repo" {
   name = "strapi-app"
 }
-
 
 # -------------------------------
 # ECS TASK DEFINITION (FARGATE)
@@ -88,8 +104,8 @@ resource "aws_ecs_service" "strapi_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = data.aws_subnets.default.ids
-    security_groups = [data.aws_security_group.strapi_sg.id]  # ✅ Add this
+    subnets         = local.subnet_ids
+    security_groups = [data.aws_security_group.strapi_sg.id]
     assign_public_ip = true
   }
 }
