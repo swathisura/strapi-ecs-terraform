@@ -1,37 +1,14 @@
-provider "aws" {
-  region = var.aws_region
-}
-
 # -------------------------------
-# VPC, Subnet, Security Group
+# DEFAULT AWS VPC (NO CREATION)
 # -------------------------------
-resource "aws_vpc" "strapi_vpc" {
-  cidr_block = "10.0.0.0/16"
+data "aws_vpc" "default" {
+  default = true
 }
 
-resource "aws_subnet" "strapi_subnet" {
-  vpc_id                  = aws_vpc.strapi_vpc.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
-}
-
-resource "aws_security_group" "strapi_sg" {
-  name   = "strapi-sg"
-  vpc_id = aws_vpc.strapi_vpc.id
-
-  ingress {
-    from_port   = 1337
-    to_port     = 1337
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
   }
 }
 
@@ -43,21 +20,21 @@ resource "aws_ecs_cluster" "strapi_cluster" {
 }
 
 # -------------------------------
-# EXISTING IAM ROLE (DATA SOURCE)
+# EXISTING IAM ROLE
 # -------------------------------
 data "aws_iam_role" "ecs_task_execution_role" {
   name = "ecs-task-execution-role"
 }
 
 # -------------------------------
-# EXISTING ECR REPO (DATA SOURCE)
+# EXISTING ECR REPO
 # -------------------------------
 data "aws_ecr_repository" "strapi_repo" {
   name = "strapi-app"
 }
 
 # -------------------------------
-# ECS Task Definition (Fargate)
+# ECS TASK DEFINITION (Fargate)
 # -------------------------------
 resource "aws_ecs_task_definition" "strapi_task" {
   family                   = var.ecs_task_family
@@ -85,7 +62,7 @@ resource "aws_ecs_task_definition" "strapi_task" {
 }
 
 # -------------------------------
-# ECS Service (Fargate)
+# ECS SERVICE (Fargate)
 # -------------------------------
 resource "aws_ecs_service" "strapi_service" {
   name            = var.ecs_service_name
@@ -95,9 +72,12 @@ resource "aws_ecs_service" "strapi_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.strapi_subnet.id]
-    security_groups  = [aws_security_group.strapi_sg.id]
+    subnets          = data.aws_subnets.default.ids
     assign_public_ip = true
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition]
   }
 }
 
