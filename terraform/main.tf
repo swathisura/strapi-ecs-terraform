@@ -13,10 +13,13 @@ data "aws_vpc" "default" {
 }
 
 # -------------------------------
-# GET DEFAULT SUBNET IDS (FIXED)
+# GET DEFAULT SUBNETS (V6 SAFE)
 # -------------------------------
-data "aws_subnet_ids" "default" {
-  vpc_id = data.aws_vpc.default.id
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 
 # -------------------------------
@@ -41,7 +44,7 @@ data "aws_ecr_repository" "strapi_repo" {
 }
 
 # -------------------------------
-# ECS TASK DEFINITION (FARGATE)
+# ECS TASK DEFINITION
 # -------------------------------
 resource "aws_ecs_task_definition" "strapi_task" {
   family                   = var.ecs_task_family
@@ -79,7 +82,7 @@ resource "aws_ecs_service" "strapi_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = data.aws_subnet_ids.default.ids
+    subnets          = data.aws_subnets.default.ids
     assign_public_ip = true
   }
 
@@ -87,5 +90,3 @@ resource "aws_ecs_service" "strapi_service" {
     ignore_changes = [task_definition]
   }
 }
-
-
