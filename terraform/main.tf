@@ -56,8 +56,9 @@ data "aws_iam_role" "ecs_task_execution_role" {
 # EXISTING ECR REPO
 # ===============================
 data "aws_ecr_repository" "strapi_repo" {
-  name = var.ecr_repo_name
+  name = "strapi-app"
 }
+
 
 # ===============================
 # ECS TASK DEFINITION
