@@ -10,9 +10,8 @@ data "aws_vpc" "default" {
 }
 
 # -------------------------------
-# CHECK OR CREATE SUBNETS
+# EXISTING SUBNETS (from default VPC)
 # -------------------------------
-# If default VPC already has subnets, we can use them
 data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
@@ -20,7 +19,9 @@ data "aws_subnets" "default" {
   }
 }
 
-# If there are no subnets in default VPC, create one
+# -------------------------------
+# CREATE SUBNET IF NONE EXIST
+# -------------------------------
 resource "aws_subnet" "strapi_subnet" {
   count                   = length(data.aws_subnets.default.ids) == 0 ? 1 : 0
   vpc_id                  = data.aws_vpc.default.id
@@ -29,11 +30,11 @@ resource "aws_subnet" "strapi_subnet" {
   map_public_ip_on_launch = true
 }
 
-# Final subnet list to use
+# -------------------------------
+# FINAL SUBNET IDS TO USE
+# -------------------------------
 locals {
-  subnet_ids = length(data.aws_subnets.default.ids) > 0 ?
-                data.aws_subnets.default.ids :
-                [aws_subnet.strapi_subnet[0].id]
+  subnet_ids = length(data.aws_subnets.default.ids) > 0 ? data.aws_subnets.default.ids : [aws_subnet.strapi_subnet[0].id]
 }
 
 # -------------------------------
@@ -109,4 +110,3 @@ resource "aws_ecs_service" "strapi_service" {
     assign_public_ip = true
   }
 }
-
