@@ -88,7 +88,9 @@ resource "aws_ecs_service" "strapi_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets         = data.aws_subnets.default.ids
+    security_groups = [data.aws_security_group.strapi_sg.id]  # ✅ Add this
     assign_public_ip = true
   }
 }
+
