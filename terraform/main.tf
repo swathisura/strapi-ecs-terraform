@@ -1,19 +1,26 @@
 # -------------------------------
-# DEFAULT AWS VPC (NO CREATION)
+# PROVIDER
+# -------------------------------
+provider "aws" {
+  region = var.aws_region
+}
+
+# -------------------------------
+# GET DEFAULT VPC
 # -------------------------------
 data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
-  }
+# -------------------------------
+# GET DEFAULT SUBNET IDS (FIXED)
+# -------------------------------
+data "aws_subnet_ids" "default" {
+  vpc_id = data.aws_vpc.default.id
 }
 
 # -------------------------------
-# ECS Cluster
+# ECS CLUSTER
 # -------------------------------
 resource "aws_ecs_cluster" "strapi_cluster" {
   name = var.ecs_cluster_name
@@ -34,7 +41,7 @@ data "aws_ecr_repository" "strapi_repo" {
 }
 
 # -------------------------------
-# ECS TASK DEFINITION (Fargate)
+# ECS TASK DEFINITION (FARGATE)
 # -------------------------------
 resource "aws_ecs_task_definition" "strapi_task" {
   family                   = var.ecs_task_family
@@ -62,7 +69,7 @@ resource "aws_ecs_task_definition" "strapi_task" {
 }
 
 # -------------------------------
-# ECS SERVICE (Fargate)
+# ECS SERVICE
 # -------------------------------
 resource "aws_ecs_service" "strapi_service" {
   name            = var.ecs_service_name
@@ -72,7 +79,7 @@ resource "aws_ecs_service" "strapi_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = data.aws_subnets.default.ids
+    subnets          = data.aws_subnet_ids.default.ids
     assign_public_ip = true
   }
 
@@ -80,4 +87,5 @@ resource "aws_ecs_service" "strapi_service" {
     ignore_changes = [task_definition]
   }
 }
+
 
